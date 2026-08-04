@@ -331,23 +331,23 @@ class InteractiveWeb3D:
         self.fig.write_html(temp_file.name)
         temp_file.close()
         
-        print(f"✓ Visualización guardada: {temp_file.name}")
-        print(f"✓ Abriendo en navegador...")
+        print(f"Visualizacion guardada: {temp_file.name}")
+        print(f"Abriendo en navegador...")
         webbrowser.open(f'file://{temp_file.name}')
-        print(f"\n🎯 CONTROLES DEL NAVEGADOR:")
-        print(f"   • 🖱️  Rotar: Clic + arrastrar")
-        print(f"   • 🔍 Zoom: Rueda del ratón o pellizco")
-        print(f"   • ↔️  Pan: Clic derecho + arrastrar")
-        print(f"   • 🏠 Reset: Botón en la esquina superior")
-    
+        print(f"\nControles del navegador:")
+        print(f"   - Rotar: Clic + arrastrar")
+        print(f"   - Zoom: Rueda del raton o pellizco")
+        print(f"   - Pan: Clic derecho + arrastrar")
+        print(f"   - Reset: Boton en la esquina superior")
+
     def save(self, filepath: str):
         """
         Guarda la visualización como HTML.
-        
+
         Parameters
         ----------
         filepath : str
             Ruta del archivo HTML
         """
         self.fig.write_html(filepath)
-        print(f"✓ Visualización guardada: {filepath}")
+        print(f"Visualizacion guardada: {filepath}")

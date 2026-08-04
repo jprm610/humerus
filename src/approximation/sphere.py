@@ -21,11 +21,13 @@ class SphericalApproximator:
         self,
         max_iterations: int = 100,
         convergence_threshold: float = 0.001,
-        verbose: bool = False
+        verbose: bool = False,
+        outlier_margin: Optional[float] = 2.0,
+        max_outlier_rounds: int = 3
     ):
         """
         Inicializa aproximador de esfera.
-        
+
         Parameters
         ----------
         max_iterations : int
@@ -34,10 +36,21 @@ class SphericalApproximator:
             Umbral de convergencia (cambio relativo)
         verbose : bool
             Si imprimir progreso
+        outlier_margin : float, optional
+            Margen máximo (mm) entre un punto local y la superficie de la
+            esfera ajustada para seguir considerándolo parte de la cabeza.
+            Dentro de cada iteración, tras el primer ajuste, los puntos que
+            excedan este margen se descartan y se reajusta con los
+            restantes (p.ej. un tubérculo vecino que se coló en el
+            vecindario local). None desactiva el rechazo de outliers.
+        max_outlier_rounds : int
+            Máximo de rondas de descarte+reajuste por iteración externa
         """
         self.max_iterations = max_iterations
         self.convergence_threshold = convergence_threshold
         self.verbose = verbose
+        self.outlier_margin = outlier_margin
+        self.max_outlier_rounds = max_outlier_rounds
     
     def approximate_from_seed(
         self,
@@ -115,7 +128,10 @@ class SphericalApproximator:
                 raise ValueError("No hay suficientes puntos locales para ajustar la esfera")
 
             local_points = surface_points[local_indices]
+            points_before_trim = len(local_points)
             fitted = self._fit_sphere(local_points, center, radius)
+            if self.outlier_margin is not None:
+                fitted, local_points, local_indices = self._trim_outliers(local_points, local_indices, fitted)
             center_new = fitted["center"]
             radius_new = fitted["radius"]
             error = fitted["error"]
@@ -123,7 +139,9 @@ class SphericalApproximator:
             if audit_trail:
                 audit_trail.log_step("sphere_iteration", {
                     "iteration": iteration,
+                    "local_points_before_trim": int(points_before_trim),
                     "local_points": int(len(local_points)),
+                    "points_trimmed": int(points_before_trim - len(local_points)),
                     "center": center_new.tolist(),
                     "radius": float(radius_new),
                     "error": float(error),
@@ -196,7 +214,52 @@ class SphericalApproximator:
                 reference = reference / reference_norm
                 mask &= (unit_normals @ reference) >= 0.25
         return np.where(mask)[0]
-    
+
+    def _trim_outliers(
+        self,
+        local_points: np.ndarray,
+        local_indices: np.ndarray,
+        fitted: Dict[str, Any]
+    ) -> tuple:
+        """
+        Descarta puntos cuyo residuo excede `outlier_margin` y reajusta.
+
+        Corrige el caso en que el vecindario local incluye anatomía vecina
+        (p.ej. un tubérculo o cóndilo) que sesga el ajuste hacia afuera de
+        la esfera real: se mide |distancia_al_centro - radio| por punto, se
+        descartan los que exceden el margen, y se reajusta con los puntos
+        restantes. Se repite hasta `max_outlier_rounds` veces o hasta que
+        ya no queden outliers.
+
+        Parameters
+        ----------
+        local_points : np.ndarray
+            Puntos del vecindario local usados en el ajuste (shape: (M, 3))
+        local_indices : np.ndarray
+            Índices de esos puntos dentro de `surface_points`
+        fitted : Dict[str, Any]
+            Resultado de `_fit_sphere` sobre `local_points`
+
+        Returns
+        -------
+        tuple
+            (fitted, local_points, local_indices) tras el recorte, usando
+            solo los puntos que quedaron como inliers en la última ronda
+        """
+        points = local_points
+        indices = local_indices
+        for _ in range(self.max_outlier_rounds):
+            center = fitted["center"]
+            radius = fitted["radius"]
+            residual = np.abs(np.linalg.norm(points - center, axis=1) - radius)
+            inlier_mask = residual <= self.outlier_margin
+            if inlier_mask.all() or int(np.count_nonzero(inlier_mask)) < 4:
+                break
+            points = points[inlier_mask]
+            indices = indices[inlier_mask]
+            fitted = self._fit_sphere(points, center, radius)
+        return fitted, points, indices
+
     def _fit_sphere(
         self,
         points: np.ndarray,

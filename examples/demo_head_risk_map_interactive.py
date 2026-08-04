@@ -30,9 +30,10 @@ from plotly.utils import PlotlyJSONEncoder
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from demo_head_risk_map import local_sphere_fit_scan, synthetic_humerus_points
+from demo_head_risk_map import synthetic_humerus_points
 from src.mesh.discretizer import MeshDiscretizer
 from src.mesh.loader import STLLoader
+from src.validation.risk_map import fit_local_spheres
 from src.visualization.interactive_web import InteractiveWeb3D
 
 
@@ -272,7 +273,7 @@ def run_server(args: argparse.Namespace) -> None:
 
     search_radius = args.search_radius if args.search_radius is not None else args.radius_estimate * 1.15
     print(f"Ajuste inicial (radio_estimado={args.radius_estimate}mm, search_radius={search_radius:.2f}mm)...")
-    rmse, fitted_radius = local_sphere_fit_scan(points, search_radius, args.radius_estimate, args.min_neighbors)
+    rmse, fitted_radius = fit_local_spheres(points, search_radius, args.radius_estimate, args.min_neighbors)
 
     state: Dict[str, Any] = {"points": points, "rmse": rmse, "fitted_radius": fitted_radius}
     html = build_html(points, rmse, fitted_radius, args).encode("utf-8")
@@ -315,7 +316,7 @@ def run_server(args: argparse.Namespace) -> None:
                 if radius_estimate <= 0 or search_radius <= 0 or min_neighbors < 4:
                     raise ValueError("Parametros fuera de rango (radios > 0, min_neighbors >= 4)")
 
-                new_rmse, new_fitted_radius = local_sphere_fit_scan(
+                new_rmse, new_fitted_radius = fit_local_spheres(
                     state["points"], search_radius, radius_estimate, min_neighbors
                 )
                 state["rmse"] = new_rmse

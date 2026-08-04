@@ -24,13 +24,12 @@ import sys
 from pathlib import Path
 
 import numpy as np
-from scipy.spatial import cKDTree
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.geometry.differential import DifferentialAnalyzer
 from src.mesh.discretizer import MeshDiscretizer
 from src.mesh.loader import STLLoader
+from src.validation.risk_map import fit_local_spheres, risk_score_from_fit
 from src.visualization.interactive_web import InteractiveWeb3D
 
 
@@ -71,68 +70,6 @@ def load_points(args: argparse.Namespace) -> np.ndarray:
     return synthetic_humerus_points()
 
 
-def local_sphere_fit_scan(
-    points: np.ndarray,
-    search_radius: float,
-    initial_radius: float,
-    min_neighbors: int,
-) -> tuple:
-    """
-    Ajusta una esfera local en cada punto usando sus vecinos dentro de search_radius.
-
-    Misma lógica de vecindario que `SphericalApproximator._get_local_points`,
-    reusando `DifferentialAnalyzer.fit_sphere_to_neighbors` para el ajuste.
-
-    Returns
-    -------
-    Tuple[np.ndarray, np.ndarray]
-        (rmse, fitted_radius) por punto; NaN donde no hay suficientes vecinos.
-    """
-    tree = cKDTree(points)
-    rmse = np.full(len(points), np.nan)
-    fitted_radius = np.full(len(points), np.nan)
-
-    for i, point in enumerate(points):
-        neighbor_idx = tree.query_ball_point(point, search_radius)
-        neighbor_idx = [j for j in neighbor_idx if j != i]
-        if len(neighbor_idx) < min_neighbors:
-            continue
-        try:
-            _, radius, error = DifferentialAnalyzer.fit_sphere_to_neighbors(
-                point, points[neighbor_idx], initial_radius=initial_radius
-            )
-            rmse[i] = error
-            fitted_radius[i] = radius
-        except (ValueError, np.linalg.LinAlgError):
-            continue
-
-    return rmse, fitted_radius
-
-
-def risk_score(
-    rmse: np.ndarray,
-    fitted_radius: np.ndarray,
-    max_error: float,
-    radius_min: float,
-    radius_max: float,
-) -> np.ndarray:
-    """
-    Score de riesgo por punto en [0, 1]: 0 = candidato válido para el buscador
-    (buen ajuste Y radio dentro de [radius_min, radius_max]), 1 = el buscador
-    lo descartaría (RMSE en o sobre max_error, o radio fuera del rango).
-    """
-    finite = np.isfinite(rmse) & np.isfinite(fitted_radius)
-    rmse_ratio = np.where(finite, rmse / max_error, np.inf)
-
-    radius_half = 0.5 * (radius_max - radius_min)
-    outside_by = np.maximum(radius_min - fitted_radius, fitted_radius - radius_max)
-    outside_by = np.maximum(outside_by, 0.0)
-    radius_ratio = np.where(finite, outside_by / radius_half, np.inf)
-
-    score = np.maximum(rmse_ratio, radius_ratio)
-    return np.clip(score, 0.0, 1.0)
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--stl", type=str, default=None, help="Ruta a archivo STL")
@@ -161,11 +98,11 @@ def main() -> None:
 
     print(f"Ajustando esfera local por punto (search_radius={search_radius:.2f}mm, "
           f"initial_radius={args.radius_estimate}mm, min_neighbors={args.min_neighbors})...")
-    rmse, fitted_radius = local_sphere_fit_scan(points, search_radius, args.radius_estimate, args.min_neighbors)
+    rmse, fitted_radius = fit_local_spheres(points, search_radius, args.radius_estimate, args.min_neighbors)
 
     print(f"Calculando score de riesgo (max_error={args.max_error}mm, "
           f"radio_fisiologico=[{args.radius_min}, {args.radius_max}]mm)...")
-    scores = risk_score(rmse, fitted_radius, args.max_error, args.radius_min, args.radius_max)
+    scores = risk_score_from_fit(rmse, fitted_radius, args.max_error, args.radius_min, args.radius_max)
 
     candidate_mask = scores < 1.0
     print(f"  Puntos con ajuste sin datos suficientes: {int(np.sum(~np.isfinite(rmse)))}/{len(points)}")
