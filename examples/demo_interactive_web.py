@@ -32,9 +32,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.approximation.sphere import SphericalApproximator
 from src.audit.trail import AuditTrail
 from src.axis.longitudinal import AxisApproximator
+from src.mesh.cleaner import CleanedMesh, MeshCleaner
 from src.mesh.discretizer import MeshDiscretizer
 from src.mesh.loader import STLLoader
 from src.optimization.best_fit import HumeralHeadBestFitSearch
+from src.optimization.sphere_ransac import SphereRansacConfig, SphereRansacFitter
 from src.visualization.interactive_web import InteractiveWeb3D
 
 
@@ -80,6 +82,20 @@ def load_surface_from_stl(stl_path: str, samples: int) -> Tuple[np.ndarray, np.n
     mesh = STLLoader.load(stl_path)
     discretizer = MeshDiscretizer()
     return discretizer.discretize_uniform(mesh.vertices, mesh.faces, samples, random_seed=42)
+
+
+def load_cleaned_surface_from_stl(stl_path: str, samples: int) -> Tuple[CleanedMesh, np.ndarray, np.ndarray]:
+    """Carga STL, limpia malla y discretiza su superficie limpia."""
+    mesh = STLLoader.load(stl_path)
+    cleaned = MeshCleaner().clean(mesh.vertices, mesh.faces)
+    discretizer = MeshDiscretizer()
+    points, normals = discretizer.discretize_uniform(
+        cleaned.vertices,
+        cleaned.faces,
+        samples,
+        random_seed=42,
+    )
+    return cleaned, points, normals
 
 
 def load_demo_surface(args: argparse.Namespace) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -241,8 +257,25 @@ def compute_best_fit_search(
     top_k: int,
     initial_radius: float,
     max_error: float,
+    cleaned_mesh: CleanedMesh | None = None,
 ) -> Dict[str, Any]:
     """Ejecuta búsqueda automática de best-fit sphere."""
+    if cleaned_mesh is not None:
+        axis = AxisApproximator.compute_longitudinal_axis(
+            cleaned_mesh.face_centroids,
+            method="diaphyseal_slice_axis",
+        )
+        audit = AuditTrail("sphere_ransac_auto")
+        fitter = SphereRansacFitter(
+            SphereRansacConfig(
+                n_iterations=n_seeds,
+                distance_tolerance=max(1.0, min(2.5, max_error)),
+                random_seed=42,
+            )
+        )
+        result = fitter.fit(cleaned_mesh, axis=axis, audit_trail=audit)
+        return ransac_fit_to_best_fit(result, cleaned_mesh, audit)
+
     axis = AxisApproximator.compute_longitudinal_axis(
         surface_points,
         method="diaphyseal_slice_axis",
@@ -257,14 +290,76 @@ def compute_best_fit_search(
     return searcher.search(surface_points, surface_normals, axis=axis)
 
 
+def ransac_fit_to_best_fit(
+    result: Dict[str, Any],
+    cleaned_mesh: CleanedMesh,
+    audit: AuditTrail,
+) -> Dict[str, Any]:
+    """Adapta el resultado RANSAC al contrato JSON usado por la demo."""
+    sphere = {
+        "center": result["center"],
+        "radius": float(result["radius"]),
+        "error": float(result["rmse"]),
+        "iterations": int(result["iterations"]),
+        "converged": bool(result["converged"]),
+    }
+    articular_faces = np.asarray(result["articular_face_indices"], dtype=int)
+    articular_points = cleaned_mesh.face_centroids[articular_faces] if len(articular_faces) else np.empty((0, 3))
+    candidate = {
+        "seed_index": -1,
+        "seed": np.asarray(result["center"], dtype=float),
+        "sphere": sphere,
+        "valid": bool(result["valid"]),
+        "score": float(result["score"]),
+        "audit": audit.get_report(),
+        "coverage_count": int(result["inlier_face_count"]),
+        "coverage_ratio": float(result["inlier_area_ratio"]),
+        "coverage_tolerance": float(SphereRansacConfig().distance_tolerance),
+        "score_components": result["score_components"],
+        "morphology": result.get("morphology", {}),
+        "morphology_z_scores": result["morphology_z_scores"],
+        "morphology_reference_flags": result["morphology_reference_flags"],
+        "morphology_reference_values": {},
+        "mad": float(result["mad"]),
+        "radial_p95": float(result.get("radial_p95", 0.0)),
+        "inlier_area": float(result["inlier_area"]),
+        "angular_coverage": float(result["angular_coverage"]),
+        "angular_compactness": float(result.get("angular_compactness", 0.0)),
+        "connected_component_count": int(result["connected_component_count"]),
+        "dominant_component_ratio": float(result["dominant_component_ratio"]),
+        "normal_score": float(result["normal_score"]),
+        "articular_side_score": float(result.get("articular_side_score", 0.0)),
+        "articular_face_indices": articular_faces,
+        "articular_points": articular_points,
+        "method": "sphere_ransac",
+        "reasons": result["reasons"],
+    }
+    return {
+        "axis": result["axis"],
+        "head_region_count": int(result["candidate_face_count"]),
+        "head_side": result["head_side"],
+        "candidate_count": int(result.get("candidate_region_count", 1)),
+        "valid_candidate_count": int(result.get("valid_region_count", int(bool(result["valid"])))),
+        "candidate_region_summaries": result.get("candidate_region_summaries", []),
+        "automatic_method": "sphere_ransac",
+        "cleaning_report": cleaned_mesh.cleaning_report,
+        "best": candidate,
+        "top_candidates": [candidate],
+        "all_candidates": [candidate],
+    }
+
+
 def best_fit_to_response(best_fit: Dict[str, Any]) -> Dict[str, Any]:
     """Convierte ranking automático a JSON compacto."""
     best = best_fit.get("best")
     top_candidates = [candidate_to_response(candidate) for candidate in best_fit.get("top_candidates", [])]
     payload = {
+        "automatic_method": best_fit.get("automatic_method", "seed_population"),
+        "cleaning_report": best_fit.get("cleaning_report", {}),
         "head_region_count": int(best_fit.get("head_region_count", 0)),
         "candidate_count": int(best_fit.get("candidate_count", 0)),
         "valid_candidate_count": int(best_fit.get("valid_candidate_count", 0)),
+        "candidate_region_summaries": best_fit.get("candidate_region_summaries", []),
         "top_candidates": top_candidates,
         "best": candidate_to_response(best) if best else None,
     }
@@ -285,14 +380,32 @@ def candidate_to_response(candidate: Dict[str, Any] | None) -> Dict[str, Any] | 
         "coverage_ratio": float(candidate.get("coverage_ratio", 0.0)),
         "coverage_tolerance": float(candidate.get("coverage_tolerance", 0.0)),
         "score_components": candidate.get("score_components", {}),
+        "morphology": candidate.get("morphology", {}),
         "morphology_z_scores": candidate.get("morphology_z_scores", {}),
         "morphology_reference_flags": candidate.get("morphology_reference_flags", {}),
         "morphology_reference_values": candidate.get("morphology_reference_values", {}),
+        "method": candidate.get("method", "seed_population"),
+        "mad": float(candidate.get("mad", candidate.get("score_components", {}).get("mad_norm", 0.0))),
+        "radial_p95": float(candidate.get("radial_p95", 0.0)),
+        "inlier_area": float(candidate.get("inlier_area", 0.0)),
+        "angular_coverage": float(candidate.get("angular_coverage", 0.0)),
+        "angular_compactness": float(candidate.get("angular_compactness", 0.0)),
+        "connected_component_count": int(candidate.get("connected_component_count", 0)),
+        "dominant_component_ratio": float(candidate.get("dominant_component_ratio", 0.0)),
+        "normal_score": float(candidate.get("normal_score", 0.0)),
+        "articular_side_score": float(candidate.get("articular_side_score", 0.0)),
+        "articular_face_indices": np.asarray(candidate.get("articular_face_indices", []), dtype=int).tolist(),
+        "reasons": candidate.get("reasons", []),
     }
     if sphere is not None:
+        morphology = candidate.get("morphology", {})
         payload.update({
             "center": np.asarray(sphere["center"]).tolist(),
             "radius": float(sphere["radius"]),
+            "roc": float(morphology.get("roc", abs(float(sphere["radius"])))),
+            "medial_offset": float(morphology.get("medial_offset", 0.0)),
+            "posterior_offset": float(morphology.get("posterior_offset", 0.0)),
+            "total_offset": float(morphology.get("total_offset", 0.0)),
             "error": float(sphere["error"]),
             "iterations": int(sphere.get("iterations", 0)),
             "converged": bool(sphere.get("converged", False)),
@@ -316,6 +429,20 @@ def best_fit_traces(best_fit: Dict[str, Any]) -> list:
         ),
         best_fit_seed_trace(best["seed"], best["score"]),
     ]
+    articular_points = np.asarray(best.get("articular_points", np.empty((0, 3))), dtype=float)
+    if articular_points.ndim == 2 and len(articular_points) > 0:
+        traces.append(
+            go.Scatter3d(
+                x=articular_points[:, 0],
+                y=articular_points[:, 1],
+                z=articular_points[:, 2],
+                mode="markers",
+                name="Región articular RANSAC",
+                marker=dict(size=3, color="orange", opacity=0.92),
+                hoverinfo="skip",
+                meta={"resultTrace": True},
+            )
+        )
     traces.extend(axis_traces(best_fit["axis"]))
     return traces
 
@@ -477,11 +604,24 @@ def build_selection_html(
         return 'Best-fit: <code>sin candidatos</code>.';
       }}
       const best = result.best_fit.best;
+      const method = result.best_fit.automatic_method || best.method || 'seed_population';
+      const extra = method === 'sphere_ransac'
+        ? `MAD <code>${{best.mad.toFixed(3)}} mm</code> ` +
+          `P95 <code>${{best.radial_p95.toFixed(3)}} mm</code> ` +
+          `área <code>${{best.inlier_area.toFixed(1)}} mm²</code> ` +
+          `angular <code>${{(100 * best.angular_coverage).toFixed(1)}}%</code> ` +
+          `compacta <code>${{(100 * best.angular_compactness).toFixed(1)}}%</code> ` +
+          `lado <code>${{(100 * best.articular_side_score).toFixed(1)}}%</code> ` +
+          `conectividad <code>${{(100 * best.dominant_component_ratio).toFixed(1)}}%</code> `
+        : '';
       return (
-        `Best-fit automático: ` +
+        `Best-fit automático <code>${{method}}</code>: ` +
         `score <code>${{best.score.toFixed(3)}}</code> ` +
-        `ROC <code>${{best.radius.toFixed(3)}} mm</code> ` +
+        `ROC <code>${{(best.roc ?? best.radius).toFixed(3)}} mm</code> ` +
+        `MO <code>${{(best.medial_offset ?? 0).toFixed(3)}} mm</code> ` +
+        `PO <code>${{(best.posterior_offset ?? 0).toFixed(3)}} mm</code> ` +
         `RMSE <code>${{best.error.toFixed(3)}} mm</code> ` +
+        extra +
         `cobertura <code>${{best.coverage_count}} (${{(100 * best.coverage_ratio).toFixed(1)}}%)</code> ` +
         `candidatos válidos <code>${{result.best_fit.valid_candidate_count}}/${{result.best_fit.candidate_count}}</code>.`
       );
@@ -703,13 +843,13 @@ def surface_to_response(
     }
 
 
-def load_surface_from_upload(filename: str, data: bytes, samples: int) -> Tuple[np.ndarray, np.ndarray]:
+def load_surface_from_upload(filename: str, data: bytes, samples: int) -> Tuple[CleanedMesh, np.ndarray, np.ndarray]:
     """Carga un STL recibido desde el navegador."""
     suffix = Path(filename).suffix or ".stl"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=True) as tmp:
         tmp.write(data)
         tmp.flush()
-        return load_surface_from_stl(tmp.name, samples)
+        return load_cleaned_surface_from_stl(tmp.name, samples)
 
 
 def run_selection_server(args: argparse.Namespace) -> None:
@@ -717,13 +857,19 @@ def run_selection_server(args: argparse.Namespace) -> None:
     state: Dict[str, Any] = {
         "surface_points": None,
         "surface_normals": None,
+        "cleaned_mesh": None,
         "filename": None,
         "best_fit": None,
     }
     if args.stl or args.synthetic_demo:
-        surface_points, surface_normals, _ = load_demo_surface(args)
+        if args.stl:
+            cleaned_mesh, surface_points, surface_normals = load_cleaned_surface_from_stl(args.stl, args.samples)
+        else:
+            cleaned_mesh = None
+            surface_points, surface_normals, _ = load_demo_surface(args)
         state["surface_points"] = surface_points
         state["surface_normals"] = surface_normals
+        state["cleaned_mesh"] = cleaned_mesh
         state["filename"] = Path(args.stl).name if args.stl else "synthetic-demo"
         state["best_fit"] = compute_best_fit_search(
             surface_points,
@@ -732,6 +878,7 @@ def run_selection_server(args: argparse.Namespace) -> None:
             args.best_fit_top,
             args.initial_radius,
             args.max_error,
+            cleaned_mesh=cleaned_mesh,
         )
 
     fig = make_selection_figure(state["surface_points"])
@@ -784,7 +931,7 @@ def run_selection_server(args: argparse.Namespace) -> None:
                 filename = unquote(self.headers.get("X-Filename", "uploaded.stl"))
                 filename = Path(filename).name
                 data = self.rfile.read(length)
-                surface_points, surface_normals = load_surface_from_upload(filename, data, args.samples)
+                cleaned_mesh, surface_points, surface_normals = load_surface_from_upload(filename, data, args.samples)
                 best_fit = compute_best_fit_search(
                     surface_points,
                     surface_normals,
@@ -792,9 +939,11 @@ def run_selection_server(args: argparse.Namespace) -> None:
                     args.best_fit_top,
                     args.initial_radius,
                     args.max_error,
+                    cleaned_mesh=cleaned_mesh,
                 )
                 state["surface_points"] = surface_points
                 state["surface_normals"] = surface_normals
+                state["cleaned_mesh"] = cleaned_mesh
                 state["filename"] = filename
                 state["best_fit"] = best_fit
                 self._send_json(surface_to_response(filename, surface_points, best_fit=best_fit))
@@ -899,7 +1048,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--synthetic-demo", action="store_true", help="Usa el humero sintetico solo para demos/tests.")
     parser.add_argument("--initial-radius", type=float, default=22.0, help="Radio inicial de esfera en mm.")
     parser.add_argument("--max-error", type=float, default=2.0, help="RMSE maximo aceptado por auditoria.")
-    parser.add_argument("--best-fit-seeds", type=int, default=60, help="Cantidad de semillas para busqueda best-fit automatica.")
+    parser.add_argument("--best-fit-seeds", type=int, default=1000, help="Semillas/iteraciones para busqueda best-fit automatica.")
     parser.add_argument("--best-fit-top", type=int, default=5, help="Cantidad de candidatos best-fit a reportar.")
     parser.add_argument("--output", help="Guarda HTML en esta ruta.")
     parser.add_argument("--no-browser", action="store_true", help="No abre navegador; util para tests.")

@@ -15,6 +15,12 @@ from datetime import datetime
 import json
 import numpy as np
 
+from ..validation.sphere import (
+    ApproximationValidationConfig,
+    MorphologyReference,
+    SphereValidator,
+)
+
 
 @dataclass
 class StepRecord:
@@ -209,138 +215,40 @@ class AuditTrail:
         bool
             True si la aproximación es válida
         """
-        is_valid = True
-        reasons = []
-        
-        # Validación 1: Error
-        error = sphere.get('error', float('inf'))
-        if error > max_error:
-            is_valid = False
-            reasons.append(f"Error {error:.3f}mm exceeds max {max_error}mm")
-        
-        # Validación 2: Radio
-        radius = sphere.get('radius', 0)
-        if not (min_radius <= radius <= max_radius):
-            is_valid = False
-            reasons.append(f"ROC {radius:.2f}mm outside range [{min_radius}, {max_radius}]")
+        reference = MorphologyReference(
+            min_roc=reference_min_roc,
+            max_roc=reference_max_roc,
+            mean_roc=reference_mean_roc,
+            sd_roc=reference_sd_roc,
+            min_medial_offset=reference_min_medial_offset,
+            max_medial_offset=reference_max_medial_offset,
+            mean_medial_offset=reference_mean_medial_offset,
+            sd_medial_offset=reference_sd_medial_offset,
+            min_posterior_offset=reference_min_posterior_offset,
+            max_posterior_offset=reference_max_posterior_offset,
+            mean_posterior_offset=reference_mean_posterior_offset,
+            sd_posterior_offset=reference_sd_posterior_offset,
+        )
+        config = ApproximationValidationConfig(
+            max_error=max_error,
+            min_radius=min_radius,
+            max_radius=max_radius,
+            enforce_morphology_reference=enforce_morphology_reference,
+            reference=reference,
+        )
+        data = SphereValidator.validate_approximation(
+            sphere,
+            axis=axis,
+            surface_points=surface_points,
+            medial_direction=medial_direction,
+            posterior_direction=posterior_direction,
+            config=config,
+        )
 
-        morphology = None
-        reference_flags = None
-        reference_statistics = None
-        reference_reasons = []
-        if axis is not None:
-            try:
-                morphology = self.compute_morphological_metrics(
-                    sphere,
-                    axis,
-                    surface_points=surface_points,
-                    medial_direction=medial_direction,
-                    posterior_direction=posterior_direction,
-                )
-                medial_offset = morphology["medial_offset"]
-                posterior_offset = morphology["posterior_offset"]
-                roc = morphology["roc"]
-
-                reference_flags = {
-                    "roc_in_reference": bool(reference_min_roc <= roc <= reference_max_roc),
-                    "medial_offset_in_reference": bool(
-                        reference_min_medial_offset <= medial_offset <= reference_max_medial_offset
-                    ),
-                    "posterior_offset_in_reference": bool(
-                        reference_min_posterior_offset <= posterior_offset <= reference_max_posterior_offset
-                    ),
-                }
-                reference_flags["all_in_reference"] = all(reference_flags.values())
-                reference_statistics = {
-                    "roc": self._reference_stat(
-                        roc,
-                        reference_min_roc,
-                        reference_max_roc,
-                        reference_mean_roc,
-                        reference_sd_roc,
-                    ),
-                    "medial_offset": self._reference_stat(
-                        medial_offset,
-                        reference_min_medial_offset,
-                        reference_max_medial_offset,
-                        reference_mean_medial_offset,
-                        reference_sd_medial_offset,
-                    ),
-                    "posterior_offset": self._reference_stat(
-                        posterior_offset,
-                        reference_min_posterior_offset,
-                        reference_max_posterior_offset,
-                        reference_mean_posterior_offset,
-                        reference_sd_posterior_offset,
-                    ),
-                }
-
-                if not reference_flags["roc_in_reference"]:
-                    reference_reasons.append(
-                        f"ROC {roc:.2f}mm outside reference "
-                        f"[{reference_min_roc}, {reference_max_roc}]"
-                    )
-                if not reference_flags["medial_offset_in_reference"]:
-                    reference_reasons.append(
-                        f"Medial offset {medial_offset:.2f}mm outside reference "
-                        f"[{reference_min_medial_offset}, {reference_max_medial_offset}]"
-                    )
-                if not reference_flags["posterior_offset_in_reference"]:
-                    reference_reasons.append(
-                        f"Posterior offset {posterior_offset:.2f}mm outside reference "
-                        f"[{reference_min_posterior_offset}, {reference_max_posterior_offset}]"
-                    )
-
-                if enforce_morphology_reference and not reference_flags["all_in_reference"]:
-                    is_valid = False
-                    reasons.extend(reference_reasons)
-            except ValueError as exc:
-                is_valid = False
-                reasons.append(str(exc))
-        
-        self.validations['approximation_valid'] = is_valid
-        data = {
-            "valid": is_valid,
-            "error": float(error),
-            "roc": float(radius),
-            "roc_plausibility_range": [float(min_radius), float(max_radius)],
-            "morphology_reference_ranges": {
-                "roc": [float(reference_min_roc), float(reference_max_roc)],
-                "medial_offset": [
-                    float(reference_min_medial_offset),
-                    float(reference_max_medial_offset),
-                ],
-                "posterior_offset": [
-                    float(reference_min_posterior_offset),
-                    float(reference_max_posterior_offset),
-                ],
-            },
-            "morphology_reference_statistics": {
-                "roc": {
-                    "mean": float(reference_mean_roc),
-                    "sd": float(reference_sd_roc),
-                },
-                "medial_offset": {
-                    "mean": float(reference_mean_medial_offset),
-                    "sd": float(reference_sd_medial_offset),
-                },
-                "posterior_offset": {
-                    "mean": float(reference_mean_posterior_offset),
-                    "sd": float(reference_sd_posterior_offset),
-                },
-            },
-            "enforce_morphology_reference": bool(enforce_morphology_reference),
-            "reasons": reasons if not is_valid else ["OK"]
-        }
-        if morphology is not None:
-            data["morphology"] = morphology
-        if reference_flags is not None:
-            data["morphology_reference_flags"] = reference_flags
-            data["morphology_reference_values"] = reference_statistics
-            data["morphology_reference_reasons"] = reference_reasons if reference_reasons else ["OK"]
+        self.validations['approximation_valid'] = bool(data["valid"])
         self.log_step("validate_approximation", data)
         
-        return is_valid
+        return bool(data["valid"])
 
     @staticmethod
     def _reference_stat(
@@ -351,16 +259,7 @@ class AuditTrail:
         sd: float,
     ) -> Dict[str, float]:
         """Empaqueta valor, rango, media, desviación y z-score."""
-        sd = float(sd)
-        z_score = (float(value) - float(mean)) / sd if sd > 0 else float("nan")
-        return {
-            "value": float(value),
-            "min": float(min_value),
-            "max": float(max_value),
-            "mean": float(mean),
-            "sd": sd,
-            "z_score": float(z_score),
-        }
+        return SphereValidator.reference_stat(value, min_value, max_value, mean, sd)
 
     @staticmethod
     def compute_morphological_metrics(
@@ -378,48 +277,13 @@ class AuditTrail:
         Si no se entregan direcciones anatómicas, se infiere un marco transversal
         determinista perpendicular al eje.
         """
-        center = np.asarray(sphere.get("center"), dtype=float)
-        origin = np.asarray(axis.get("origin"), dtype=float)
-        longitudinal = np.asarray(axis.get("direction"), dtype=float)
-
-        if center.shape != (3,):
-            raise ValueError("sphere['center'] debe tener shape (3,)")
-        if origin.shape != (3,) or longitudinal.shape != (3,):
-            raise ValueError("axis debe incluir 'origin' y 'direction' con shape (3,)")
-
-        norm = np.linalg.norm(longitudinal)
-        if norm <= 1e-12:
-            raise ValueError("axis['direction'] no puede ser vector cero")
-        longitudinal = longitudinal / norm
-
-        medial_unit, posterior_unit = AuditTrail._transverse_frame(
-            longitudinal,
+        return SphereValidator.compute_morphological_metrics(
+            sphere,
+            axis,
+            surface_points=surface_points,
             medial_direction=medial_direction,
             posterior_direction=posterior_direction,
-            surface_points=surface_points,
         )
-
-        vec = center - origin
-        axial_position = float(np.dot(vec, longitudinal))
-        closest_axis_point = origin + axial_position * longitudinal
-        offset_vector = center - closest_axis_point
-        signed_medial = float(np.dot(offset_vector, medial_unit))
-        signed_posterior = float(np.dot(offset_vector, posterior_unit))
-
-        return {
-            "roc": float(sphere.get("radius", 0.0)),
-            "axis_point": closest_axis_point.tolist(),
-            "offset_vector": offset_vector.tolist(),
-            "total_offset": float(np.linalg.norm(offset_vector)),
-            "medial_offset": abs(signed_medial),
-            "posterior_offset": abs(signed_posterior),
-            "signed_medial_offset": signed_medial,
-            "signed_posterior_offset": signed_posterior,
-            "axial_position": axial_position,
-            "medial_direction": medial_unit.tolist(),
-            "posterior_direction": posterior_unit.tolist(),
-            "longitudinal_direction": longitudinal.tolist(),
-        }
 
     @staticmethod
     def _transverse_frame(
@@ -429,34 +293,12 @@ class AuditTrail:
         surface_points: Optional[np.ndarray] = None,
     ) -> tuple:
         """Construye dos direcciones ortonormales perpendiculares al eje."""
-        medial = AuditTrail._project_perpendicular(medial_direction, longitudinal)
-        if medial is None and surface_points is not None:
-            points = np.asarray(surface_points, dtype=float)
-            if points.ndim == 2 and points.shape[1] == 3 and len(points) >= 3:
-                centered = points - points.mean(axis=0)
-                _, _, vh = np.linalg.svd(centered, full_matrices=False)
-                for candidate in vh[1:]:
-                    medial = AuditTrail._project_perpendicular(candidate, longitudinal)
-                    if medial is not None:
-                        break
-
-        if medial is None:
-            for candidate in (np.array([1.0, 0.0, 0.0]), np.array([0.0, 1.0, 0.0])):
-                medial = AuditTrail._project_perpendicular(candidate, longitudinal)
-                if medial is not None:
-                    break
-
-        posterior = AuditTrail._project_perpendicular(posterior_direction, longitudinal)
-        if posterior is not None:
-            posterior = posterior - np.dot(posterior, medial) * medial
-            posterior_norm = np.linalg.norm(posterior)
-            posterior = posterior / posterior_norm if posterior_norm > 1e-12 else None
-
-        if posterior is None:
-            posterior = np.cross(longitudinal, medial)
-            posterior = posterior / np.linalg.norm(posterior)
-
-        return medial, posterior
+        return SphereValidator.transverse_frame(
+            longitudinal,
+            medial_direction=medial_direction,
+            posterior_direction=posterior_direction,
+            surface_points=surface_points,
+        )
 
     @staticmethod
     def _project_perpendicular(
@@ -464,16 +306,7 @@ class AuditTrail:
         axis: np.ndarray,
     ) -> Optional[np.ndarray]:
         """Proyecta un vector al plano perpendicular del eje y lo normaliza."""
-        if vector is None:
-            return None
-        projected = np.asarray(vector, dtype=float)
-        if projected.shape != (3,):
-            return None
-        projected = projected - np.dot(projected, axis) * axis
-        norm = np.linalg.norm(projected)
-        if norm <= 1e-12:
-            return None
-        return projected / norm
+        return SphereValidator.project_perpendicular(vector, axis)
     
     def get_report(self) -> Dict[str, Any]:
         """

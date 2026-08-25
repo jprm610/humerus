@@ -1,322 +1,342 @@
-# RESUMEN DE IMPLEMENTACIÓN
+# Resumen de Implementación
 
-## ✅ COMPLETADO EXITOSAMENTE
+Última actualización: 2026-07-15
 
-### Fase 0: Configuración de Agentes IA
-- ✅ `.agent.md` — Definición de 5 agentes especializados
-- ✅ `.instructions.md` — Requisitos técnicos y estándares
-- ✅ `AGENTS.md` — Guía completa de coordinación de agentes
-- ✅ `copilot-instructions.md` — Instrucciones para Copilot
-- ✅ `README.md` — Documentación del proyecto
+Este documento resume el estado real del proyecto después de las iteraciones recientes. La documentación de agentes IA, Copilot y quickstart fue retirada porque ya no representa el flujo de trabajo ni ayuda a mejorar la precisión geométrica.
 
-### Fase 1: Sistema de Auditoría ✅
-**Status**: COMPLETAMENTE IMPLEMENTADO Y TESTEADO
+## Limpieza de Documentación
 
-**Archivos**:
-- `src/audit/trail.py` — Sistema AuditTrail (implementado)
-  - ✅ Clase `AuditTrail` para registrar pasos
-  - ✅ Validación de semillas
-  - ✅ Validación de aproximaciones
-  - ✅ Generación de reportes JSON
+Se eliminaron:
 
-- `src/audit/__init__.py` — Módulo inicializado
+- `.agent.md`
+- `.instructions.md`
+- `AGENTS.md`
+- `copilot-instructions.md`
+- `QUICK_START.md`
+- `STATUS.md`
 
-**Clases Implementadas**:
-```python
-class AuditTrail:
-    - log_step(step_name, data)
-    - validate_seed(point, articulation_region)
-    - is_valid_approximation(sphere)
-    - get_report()
-    - to_json()
+La documentación viva queda concentrada en:
 
-class AuditManager:
-    - create_audit(seed_id)
-    - get_summary()
-```
+- `README.md`: guía principal de uso, arquitectura, métricas y limitaciones.
+- `IMPLEMENTATION_SUMMARY.md`: estado de implementación y decisiones técnicas.
 
-**Tests**: 17 tests PASADOS ✅
+## Capacidades Implementadas
 
-### Fase 2: Visualización 3D ✅
-**Status**: COMPLETAMENTE IMPLEMENTADO Y TESTEADO
+### Carga y Muestreo STL
 
-**Archivos**:
-- `src/visualization/visualizer.py` — Visualizador 3D
-  - ✅ Clase `Visualizer3D` para gráficos 3D
-  - ✅ Clase `InteractiveVisualizer` para vistas comparativas
-  - ✅ **Esferas en COLOR ROJO** ✅
-  - ✅ **Eje longitudinal en COLOR ROJO** ✅
+Archivos:
 
-**Características Principales**:
-```python
-class Visualizer3D:
-    - create_figure()
-    - plot_mesh(vertices, faces)
-    - plot_sphere(center, radius, color='red')  # ← ROJO
-    - plot_axis(origin, direction, length, color='red')  # ← ROJO
-    - plot_surface_points(points)
-    - plot_seeds(seeds, valid_mask)
-    - plot_approximations(approximations)
-    - save(filepath)
-    - show()
-```
+- `src/mesh/loader.py`
+- `src/mesh/discretizer.py`
+- `src/mesh/cleaner.py`
 
-**Tests**: 13 tests PASADOS ✅
+Estado:
 
-### Fase 3: Tests de Integración ✅
-**Status**: COMPLETAMENTE IMPLEMENTADO Y TESTEADO
+- Carga STL ASCII y binario.
+- Extrae vértices, caras y normales.
+- Limpia triángulos degenerados y vértices duplicados.
+- Calcula áreas, centroides, normales coherentes y adyacencia por aristas.
+- Filtra componentes conectados pequeños cuando se requiere conservar solo el componente principal.
+- Discretiza superficie con muestreo uniforme.
+- Entrega `surface_points` y `surface_normals` para el pipeline geométrico.
 
-**Archivos**:
-- `tests/test_audit.py` — 17 tests de auditoría
-- `tests/test_visualization.py` — 13 tests de visualización
-- `tests/test_integration.py` — 6 tests de integración
+### Ajuste de Esfera Desde Semilla
 
-**Cobertura Total**: 36 TESTS PASADOS ✅
+Archivo:
 
-**Tests de Auditoría** (17 tests):
-- ✅ Creación de registros
-- ✅ Conversión a diccionario/JSON
-- ✅ Logging de múltiples pasos
-- ✅ Validación de semillas (válidas e inválidas)
-- ✅ Validación de aproximaciones
-- ✅ Generación de reportes
-- ✅ Gestor de auditorías multicanal
+- `src/approximation/sphere.py`
+- `src/geometry/sphere.py`
 
-**Tests de Visualización** (13 tests):
-- ✅ Creación de figura 3D
-- ✅ Graficar malla triangular
-- ✅ Graficar esfera en ROJO
-- ✅ Graficar eje en ROJO
-- ✅ Graficar puntos de superficie
-- ✅ Graficar semillas
-- ✅ Graficar múltiples aproximaciones
-- ✅ Leyenda y escala
-- ✅ Guardar figura a archivo
+Estado:
 
-**Tests de Integración** (6 tests):
-- ✅ Flujo completo de una semilla
-- ✅ Flujo de múltiples semillas
-- ✅ Visualización con resultados auditados
-- ✅ Integración completa: auditoría + visualización
-- ✅ Preservación de integridad de datos
-- ✅ Aislamiento de auditorías
+- Implementa `SphericalApproximator`.
+- Ajusta esfera usando primitivas comunes de `SphereGeometry`.
+- Itera desde una semilla de superficie.
+- Registra inicialización, iteraciones y resultado en `AuditTrail`.
+- Controla convergencia por cambio de centro/radio.
 
-### Fase 4: Scripts de Ejemplo ✅
-**Status**: COMPLETAMENTE IMPLEMENTADO
+### Primitivas Geométricas de Esfera
 
-**Archivos**:
-- `examples/demo_visualization.py` — 4 demostraciones completas
-  - ✅ Demo 1: Esfera y eje en ROJO
-  - ✅ Demo 2: Múltiples aproximaciones en ROJO
-  - ✅ Demo 3: Auditoría + Visualización
-  - ✅ Demo 4: Vista comparativa
+Archivo:
 
-- `run_tests.py` — Script para ejecutar todas las pruebas
+- `src/geometry/sphere.py`
 
-### Plantillas Base Creadas
-- `src/mesh/loader.py` — Cargador de STL
-- `src/mesh/discretizer.py` — Discretizador de superficie
-- `src/geometry/curvature.py` — Cálculo de curvatura
-- `src/geometry/differential.py` — Análisis diferencial
-- `src/approximation/sphere.py` — Aproximación de esfera
-- `src/optimization/refinement.py` — Optimizador
-- `src/axis/longitudinal.py` — Aproximación de eje
-- `src/validation/viability.py` — Validador de semillas
+Estado:
 
-## 📊 RESULTADOS DE TESTS
+- Calcula esfera desde cuatro puntos no coplanares.
+- Calcula ajuste algebraico inicial.
+- Calcula residuos radiales y alineación normal-radial.
+- Calcula cobertura angular.
+- Ejecuta refit geométrico robusto con pérdida Huber.
+- Es usado por el aproximador clásico, RANSAC, validación de semillas y análisis diferencial.
 
-```
-============================= test session starts ==============================
-platform linux -- Python 3.14.5, pytest-9.1.0
+### Best-Fit Automático por RANSAC
 
-collected 36 items
+Archivo:
 
-tests/test_audit.py                       17 PASSED ✅
-tests/test_visualization.py               13 PASSED ✅
-tests/test_integration.py                 6 PASSED ✅
+- `src/optimization/sphere_ransac.py`
 
-============================== 36 passed in 1.17s ==============================
-```
+Clase:
 
-**Tasa de éxito**: 100% ✅
+- `SphereRansacFitter`
 
-## 📁 ESTRUCTURA DEL PROYECTO
+Estado:
 
-```
-humero/
-├── src/
-│   ├── audit/
-│   │   ├── __init__.py
-│   │   └── trail.py              ✅ IMPLEMENTADO
-│   ├── visualization/
-│   │   ├── __init__.py
-│   │   └── visualizer.py         ✅ IMPLEMENTADO
-│   ├── mesh/
-│   │   ├── __init__.py
-│   │   ├── loader.py             📋 Plantilla
-│   │   └── discretizer.py        📋 Plantilla
-│   ├── geometry/
-│   │   ├── __init__.py
-│   │   ├── curvature.py          📋 Plantilla
-│   │   └── differential.py       📋 Plantilla
-│   ├── approximation/
-│   │   ├── __init__.py
-│   │   └── sphere.py             📋 Plantilla
-│   ├── optimization/
-│   │   ├── __init__.py
-│   │   └── refinement.py         📋 Plantilla
-│   ├── axis/
-│   │   ├── __init__.py
-│   │   └── longitudinal.py       📋 Plantilla
-│   ├── validation/
-│   │   ├── __init__.py
-│   │   └── viability.py          📋 Plantilla
-│   └── __init__.py
-├── tests/
-│   ├── __init__.py
-│   ├── test_audit.py             ✅ 17 TESTS PASADOS
-│   ├── test_visualization.py     ✅ 13 TESTS PASADOS
-│   └── test_integration.py       ✅ 6 TESTS PASADOS
-├── examples/
-│   ├── __init__.py
-│   └── demo_visualization.py     ✅ 4 DEMOSTRACIONES
-├── data/
-│   └── sample_humeri/            (Carpeta para modelos STL)
-├── .agent.md                     ✅ COMPLETADO
-├── .instructions.md              ✅ COMPLETADO
-├── AGENTS.md                     ✅ COMPLETADO
-├── copilot-instructions.md       ✅ COMPLETADO
-├── README.md                     ✅ COMPLETADO
-├── requirements.txt              ✅ ACTUALIZADO
-└── run_tests.py                  ✅ COMPLETADO
-```
+- Evalúa ambos extremos del húmero para no confundir cabeza humeral y codo.
+- Selecciona cuatro caras distribuidas por extremo e iteración.
+- Calcula esfera inicial desde cuatro puntos no coplanares.
+- Filtra por rango plausible de ROC.
+- Evalúa residuo radial y concordancia normal.
+- Exige que el soporte esté en el hemisferio articular externo respecto al eje diafisario.
+- Conserva el componente conectado más grande de triángulos compatibles.
+- Incluye ROC, medial offset y posterior offset en el ranking inicial de candidatos.
+- Expande la región articular por vecindad con restricciones de residuo, normal y suavidad.
+- Reajusta centro/radio con minimización geométrica robusta usando pérdida Huber.
+- Recorta un núcleo conectado de bajo residuo radial después del refit.
+- Acota el radio durante el refit al rango plausible `17-40 mm`.
+- Retorna esfera, región articular, score, área, MAD, P95 radial, cobertura angular, compacidad, lado articular y conectividad.
 
-## 🎨 VISUALIZACIÓN EN ROJO
+Componentes del score:
 
-### Características Destacadas:
+- MAD normalizado.
+- Área compatible.
+- Cobertura angular.
+- Dominancia de componente conectado.
+- Concordancia radial de normales.
+- Alineación con el lado articular de la cabeza.
+- Penalización morfológica por z-scores.
+- Penalización explícita por métricas fuera de referencia.
 
-1. **Esferas en ROJO**:
-   ```python
-   viz.plot_sphere(center, radius, color='red')  # ✅ Color ROJO
-   ```
-   - Wireframe 3D parameterizado
-   - Totalmente personalizable
-   - Marca el centro con punto rojo
+Compatibilidad:
 
-2. **Eje Longitudinal en ROJO**:
-   ```python
-   viz.plot_axis(origin, direction, length, color='red')  # ✅ Color ROJO
-   ```
-   - Línea 3D desde cabeza a distal
-   - Marca de inicio (triángulo) en ROJO
-   - Marca de final (triángulo invertido) en ROJO
+- `src/optimization/best_fit.py` sigue disponible como fallback poblacional para flujos basados solo en puntos.
 
-3. **Múltiples Aproximaciones en ROJO**:
-   ```python
-   viz.plot_approximations(approximations, color='red')  # ✅ TODAS EN ROJO
-   ```
+### Eje Longitudinal Robusto
 
-## 🧪 CÓMO EJECUTAR LOS TESTS
+Archivo:
+
+- `src/axis/longitudinal.py`
+
+Método por defecto:
+
+- `diaphyseal_slice_axis`
+
+Estado:
+
+- No usa la esfera para estimar el eje.
+- Usa PCA global solo para orientación inicial.
+- Neutraliza densidad mediante voxel downsample.
+- Detecta si el húmero parece completo por longitud proyectada.
+- En modelo completo descarta cabeza y cola.
+- En modelo incompleto descarta solo la porción proximal.
+- Divide la región de interés en slices.
+- Elimina slices con spikes de área o perímetro.
+- Ajusta el eje final con RANSAC sobre centros de slices.
+- Devuelve diagnósticos: completitud, crop, slices retenidos, inliers/outliers RANSAC.
+
+### Auditoría y Validación Morfológica
+
+Archivo:
+
+- `src/audit/trail.py`
+- `src/validation/sphere.py`
+
+Estado:
+
+- `SphereValidator` concentra las reglas de aceptación/rechazo.
+- `AuditTrail` registra pasos en formato JSON-friendly y delega las reglas.
+- Valida semillas.
+- Valida aproximaciones por RMSE y ROC plausible.
+- Valida soporte superficial RANSAC por área, conectividad, conteo de caras y parámetros finitos.
+- Calcula métricas morfológicas:
+  - ROC.
+  - Medial offset.
+  - Posterior offset.
+  - Total offset transversal.
+- Reporta rangos de referencia, medias, desviaciones estándar y z-scores.
+
+Referencias configuradas:
+
+| Métrica | Rango | Media | SD |
+|---|---:|---:|---:|
+| ROC | 17-30 mm | 22.5 mm | 2.8 mm |
+| Medial offset | 1-14 mm | 6.8 mm | 2.5 mm |
+| Posterior offset | 0-10 mm | 2.0 mm | 2.0 mm |
+
+Decisión de validación:
+
+- Los rangos de referencia morfológica son indicadores por defecto.
+- No invalidan una esfera salvo que se use `enforce_morphology_reference=True`.
+- La validación dura mantiene RMSE y ROC plausible como criterios principales.
+
+### Demo Web Interactiva
+
+Archivo:
+
+- `examples/demo_interactive_web.py`
+
+Estado:
+
+- Permite cargar STL desde navegador.
+- Limpia la malla STL antes del cálculo automático.
+- Discretiza la superficie.
+- Ejecuta RANSAC esférico automático al cargar STL real.
+- Dibuja superficie, esfera completa, región articular RANSAC, marcador automático y eje.
+- Permite hacer clic en una semilla manual para comparar.
+- Muestra:
+  - Score best-fit.
+  - ROC.
+  - RMSE.
+  - MAD.
+  - P95 radial.
+  - Área de inliers.
+  - Cobertura angular.
+  - Compacidad angular.
+  - Lado articular.
+  - Conectividad.
+  - Cobertura.
+  - Candidatos válidos.
+  - Longitud de eje.
+  - Completo/incompleto.
+  - Modo de crop.
+  - RANSAC inliers.
+  - Medial offset.
+  - Posterior offset.
+  - Estado y z-scores de referencia.
+
+Parámetros CLI relevantes:
 
 ```bash
-# Opción 1: Ejecutar todos los tests
-cd /home/jeruah/Documentos/University/geometria/humero
-python3 -m pytest tests/ -v
-
-# Opción 2: Tests con cobertura
-python3 -m pytest tests/ --cov=src --cov-report=html
-
-# Opción 3: Tests individuales
-python3 -m pytest tests/test_audit.py -v
-python3 -m pytest tests/test_visualization.py -v
-python3 -m pytest tests/test_integration.py -v
+--stl
+--samples
+--synthetic-demo
+--initial-radius
+--max-error
+--best-fit-seeds
+--best-fit-top
+--host
+--port
+--no-browser
 ```
 
-## 📝 CÓMO USAR LA VISUALIZACIÓN
+## Estado de Tests
 
-```python
-from src.visualization.visualizer import Visualizer3D
-from src.audit.trail import AuditManager
-import numpy as np
+Comando:
 
-# Crear visualizador
-viz = Visualizer3D()
-viz.create_figure()
-
-# Graficar esfera en ROJO
-center = np.array([10, 20, 30])
-radius = 25.0
-viz.plot_sphere(center, radius, color='red')
-
-# Graficar eje en ROJO
-origin = np.array([10, 20, 30])
-direction = np.array([0, 0, 1])
-length = 100.0
-viz.plot_axis(origin, direction, length, color='red')
-
-# Guardar o mostrar
-viz.save('resultado.png')
-# viz.show()
-```
-
-## 🔧 DEPENDENCIAS INSTALADAS
-
-```
-numpy>=1.20
-scipy>=1.7
-scikit-learn>=1.0
-matplotlib>=3.3
-pytest>=6.0
-pytest-cov>=2.12
-```
-
-Instalar con:
 ```bash
-pip install --break-system-packages -r requirements.txt
+pytest -q
 ```
 
-## 📚 PRÓXIMOS PASOS
+Resultado actual:
 
-Para continuar con la implementación:
+```text
+56 passed
+```
 
-1. **Mesh Processing** (@mesh-processor):
-   - Implementar `src/mesh/loader.py`
-   - Implementar `src/mesh/discretizer.py`
+Cobertura funcional en tests:
 
-2. **Geometry** (@geometry-specialist):
-   - Implementar `src/geometry/curvature.py`
-   - Implementar `src/geometry/differential.py`
+- Auditoría y serialización.
+- Visualización 3D.
+- Carga STL ASCII/binaria.
+- Discretización uniforme.
+- Curvatura en región esférica.
+- Estimación de eje robusta en húmero completo e incompleto.
+- Validación de offsets morfológicos.
+- Delegación de reglas desde auditoría hacia `SphereValidator`.
+- Respuesta JSON de la demo web.
+- Best-fit automático recuperando una esfera sintética conocida.
+- Limpieza de malla y adyacencia triangular.
+- Esfera exacta desde cuatro puntos.
+- RANSAC esférico tolerando tallo/outliers.
+- Serialización de región articular detectada.
 
-3. **Validation** (@validation-auditor):
-   - Implementar `src/validation/viability.py`
+## Resultados de Smoke Test en STL de Muestra
 
-4. **Approximation** (@sphere-optimizer):
-   - Implementar `src/approximation/sphere.py`
-   - Implementar `src/optimization/refinement.py`
+Con RANSAC de 1000 iteraciones sobre mallas limpias:
 
-5. **Axis** (@axis-approximator):
-   - Implementar `src/axis/longitudinal.py`
+```text
+Human_humerus_2_reduced.stl
+  ROC: 20.020 mm
+  MO: 9.893 mm
+  PO: 2.540 mm
+  RMSE: 0.374 mm
+  MAD: 0.214 mm
+  P95 radial: 0.731 mm
+  caras compatibles: 1287
+  area ratio: 0.0802
+  cobertura angular: 0.842
+  compacidad angular: 0.622
+  lado articular: 0.563
+  score: 4.949
 
-## 📋 CHECKLIST DE ENTREGA
+HumeroFinal1.stl
+  ROC: 21.089 mm
+  MO: 3.957 mm
+  PO: 2.806 mm
+  RMSE: 0.303 mm
+  MAD: 0.141 mm
+  P95 radial: 0.695 mm
+  caras compatibles: 355
+  area ratio: 0.1263
+  cobertura angular: 0.896
+  compacidad angular: 0.606
+  lado articular: 0.566
+  score: 3.137
 
-- ✅ Configuración de 5 agentes IA especializados
-- ✅ Sistema de auditoría completamente implementado
-- ✅ Visualizador 3D con esferas y eje en ROJO
-- ✅ 36 tests unitarios e integración PASADOS
-- ✅ Scripts de demostración funcionales
-- ✅ Documentación completa
-- ✅ Estructura de proyecto profesional
-- ✅ Requisitos instalados y configurados
+Right_humerus_bone_one-piece.stl
+  ROC: 21.188 mm
+  MO: 14.402 mm
+  PO: 7.355 mm
+  RMSE: 0.367 mm
+  MAD: 0.199 mm
+  P95 radial: 0.786 mm
+  caras compatibles: 411
+  area ratio: 0.0750
+  cobertura angular: 0.894
+  compacidad angular: 0.566
+  lado articular: 0.546
+  score: 22.395
+```
 
-## 🚀 STATUS FINAL
+Estos smoke tests verifican comportamiento del pipeline; no deben interpretarse como validación clínica.
 
-**FASE 0 Y FASES 1-2 COMPLETADAS EXITOSAMENTE** ✅
+## Decisiones Técnicas Relevantes
 
-Sistema de auditoría y visualización 3D listos para usar.
-Estructura base preparada para implementación de agentes.
+### La esfera ya no define el eje
 
----
+El eje depende solo de la nube de puntos y del análisis diafisario. Esto evita el ciclo lógico donde la validez de la esfera depende del eje y el eje depende de una esfera potencialmente inválida.
 
-**Última actualización**: 2024-06-17
-**Tests**: 36/36 PASADOS ✅
-**Cobertura**: Sistema completamente testeado
+### Modelos completos e incompletos
+
+El eje intenta adaptarse a ambos:
+
+- Completo: descarta extremos proximal y distal.
+- Incompleto: descarta la porción proximal, conserva más tallo distal disponible.
+
+### Morfología como referencia, no bloqueo automático
+
+Los rangos de ROC/MO/PO ayudan a ordenar y auditar candidatos, pero no invalidan por sí solos salvo modo estricto. Esto evita rechazar geometrías plausibles por variabilidad anatómica o por errores de marco anatómico.
+
+### Best-fit por RANSAC, no por primera convergencia
+
+El resultado automático no es "la primera esfera que funciona"; RANSAC explora hipótesis de cuatro puntos, conserva regiones conectadas y refina el mejor soporte geométrico.
+
+### La conectividad ahora importa
+
+La superficie articular se evalúa como triángulos conectados, no solo como puntos cercanos a una esfera. Esto penaliza parches pequeños y superficies aisladas aunque su RMSE local sea bajo.
+
+## Limitaciones Pendientes
+
+- La segmentación articular RANSAC necesita validación contra anotaciones manuales.
+- El marco medial/posterior sigue siendo aproximado.
+- La detección de cabeza por expansión transversal puede fallar en STL muy parciales.
+- La cobertura depende de conectividad, resolución de malla y calidad de normales.
+- La generación del parche faltante de cabeza todavía no está implementada.
+
+## Próximos Pasos Recomendados
+
+1. Validar la región articular RANSAC con casos anotados.
+2. Estimar marco anatómico local para medial/posterior en lugar de usar ejes globales.
+3. Guardar reportes comparables por STL en JSON/CSV.
+4. Evaluar sensibilidad de resultados a iteraciones RANSAC, tolerancia de distancia y ángulo normal.
+5. Implementar contorno articular y generación de parche faltante como fase posterior.

@@ -2,8 +2,8 @@
 
 import numpy as np
 from typing import Dict, Optional, Any
-from scipy.optimize import least_squares
 from ..audit.trail import AuditTrail
+from ..geometry.sphere import SphereGeometry
 
 
 class SphericalApproximator:
@@ -226,28 +226,24 @@ class SphericalApproximator:
         if len(points) < 4:
             raise ValueError("Se requieren al menos 4 puntos")
 
-        # Solución algebraica inicial: x^2+y^2+z^2 + ax+by+cz+d = 0.
-        a = np.column_stack((points, np.ones(len(points))))
-        b = -np.sum(points * points, axis=1)
-        coeffs, *_ = np.linalg.lstsq(a, b, rcond=None)
-        center = -0.5 * coeffs[:3]
-        radius_sq = np.dot(center, center) - coeffs[3]
-        radius = float(np.sqrt(max(radius_sq, 1e-12)))
+        try:
+            center, radius = SphereGeometry.algebraic_initial_fit(points)
+        except (ValueError, np.linalg.LinAlgError):
+            center = np.asarray(initial_center, dtype=float)
+            radius = float(initial_radius)
 
-        initial = np.array([center[0], center[1], center[2], radius], dtype=float)
-        if not np.all(np.isfinite(initial)):
-            initial = np.array([initial_center[0], initial_center[1], initial_center[2], initial_radius])
+        if not np.all(np.isfinite(center)) or not np.isfinite(radius):
+            center = np.asarray(initial_center, dtype=float)
+            radius = float(initial_radius)
 
-        def residual(params: np.ndarray) -> np.ndarray:
-            c = params[:3]
-            r = abs(params[3])
-            return np.linalg.norm(points - c, axis=1) - r
-
-        optimized = least_squares(residual, initial, max_nfev=200)
-        params = optimized.x
-        center = params[:3]
-        radius = float(abs(params[3]))
-        rmse = float(np.sqrt(np.mean(residual(params) ** 2)))
+        center, radius, rmse, _ = SphereGeometry.robust_fit(
+            points,
+            center,
+            radius,
+            radius_bounds=(1e-6, np.inf),
+            f_scale=1.0,
+            max_nfev=200,
+        )
 
         return {"center": center, "radius": radius, "error": rmse}
     

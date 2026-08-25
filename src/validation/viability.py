@@ -3,6 +3,8 @@
 import numpy as np
 from typing import Optional
 
+from ..geometry.sphere import SphereGeometry
+
 
 class SeedValidator:
     """
@@ -85,20 +87,12 @@ class SeedValidator:
             return False
 
         points = np.vstack([point, neighbors])
-        a = np.column_stack((points, np.ones(len(points))))
-        b = -np.sum(points * points, axis=1)
         try:
-            coeffs, *_ = np.linalg.lstsq(a, b, rcond=None)
-        except np.linalg.LinAlgError:
+            center, radius = SphereGeometry.algebraic_initial_fit(points)
+        except (ValueError, np.linalg.LinAlgError):
             return False
-
-        center = -0.5 * coeffs[:3]
-        radius_sq = np.dot(center, center) - coeffs[3]
-        if radius_sq <= 0:
-            return False
-        radius = float(np.sqrt(radius_sq))
         relative_error = abs(radius - radius_estimate) / max(radius_estimate, 1e-12)
-        residuals = np.linalg.norm(points - center, axis=1) - radius
+        residuals = SphereGeometry.radial_residuals(points, center, radius)
         rmse = np.sqrt(np.mean(residuals ** 2))
         return bool(relative_error <= tolerance and rmse <= max(2.0, tolerance * radius_estimate))
     

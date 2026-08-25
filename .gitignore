@@ -1,5 +1,15 @@
-graphify-out/
 __pycache__/
 *.pyc
+*.py[cod]
+*$py.class
+
+.pytest_cache/
+.coverage
+htmlcov/
+
 .venv/
 venv/
+env/
+
+.DS_Store
+graphify-out/

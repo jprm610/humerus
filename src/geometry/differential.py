@@ -2,7 +2,7 @@
 
 import numpy as np
 from typing import Tuple
-from scipy.optimize import least_squares
+from .sphere import SphereGeometry
 
 
 class DifferentialAnalyzer:
@@ -164,22 +164,15 @@ class DifferentialAnalyzer:
         if len(points) < 4:
             raise ValueError("Se requieren al menos 4 puntos para ajustar esfera")
 
-        a = np.column_stack((points, np.ones(len(points))))
-        b = -np.sum(points * points, axis=1)
-        coeffs, *_ = np.linalg.lstsq(a, b, rcond=None)
-        center = -0.5 * coeffs[:3]
-        radius_sq = np.dot(center, center) - coeffs[3]
-        radius = float(np.sqrt(max(radius_sq, 1e-12)))
-
-        initial = np.array([center[0], center[1], center[2], radius])
-
-        def residual(params: np.ndarray) -> np.ndarray:
-            return np.linalg.norm(points - params[:3], axis=1) - abs(params[3])
-
-        result = least_squares(residual, initial, max_nfev=200)
-        center = result.x[:3]
-        radius = float(abs(result.x[3]))
-        error = float(np.sqrt(np.mean(residual(result.x) ** 2)))
+        center, radius = SphereGeometry.algebraic_initial_fit(points)
+        center, radius, error, _ = SphereGeometry.robust_fit(
+            points,
+            center,
+            radius,
+            radius_bounds=(1e-6, np.inf),
+            f_scale=1.0,
+            max_nfev=200,
+        )
         return center, radius, error
     
     @staticmethod
